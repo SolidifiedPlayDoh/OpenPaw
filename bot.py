@@ -109,6 +109,7 @@ def main() -> None:
         "context_files": [],
     }
     bot.ai_chat_history = {}  # channel_id -> list of {role, content}
+    bot.ai_thread_history = {}  # thread_id (msg id) -> list of {role, content} for reply chains
     groq_api_key = os.getenv("GROQ_API_KEY")
     groq_api_url = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
     groq_model = os.getenv("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
@@ -446,6 +447,7 @@ def main() -> None:
     async def clearmem(ctx):
         cid = ctx.channel.id
         bot.ai_chat_history[cid] = []
+        bot.ai_thread_history.clear()
         await ctx.send("✅ AI memory cleared for this channel")
 
     @bot.command(name="lottery", help="Get OpenPaw's lottery number predictions (joke)")
@@ -651,6 +653,7 @@ def main() -> None:
     @bot.tree.command(name="clearmem", description="Clear AI chat history for this channel")
     async def clearmem_slash(interaction: discord.Interaction):
         bot.ai_chat_history[interaction.channel.id] = []
+        bot.ai_thread_history.clear()
         await interaction.response.send_message("✅ AI memory cleared for this channel")
 
     @bot.tree.command(name="clearview", description="Send invisible newlines to clear the chat view")
@@ -1051,13 +1054,23 @@ def main() -> None:
         except Exception as e:
             return f"Request failed: {e}"
 
-    async def _do_ai_reply(message: discord.Message, script_dir: str):
-        """Send AI reply for a message. Used by both channel mode and mention mode. Uses Groq (same as vision_bot)."""
-        cid = message.channel.id
-        if cid not in bot.ai_chat_history:
-            bot.ai_chat_history[cid] = []
-        hist = bot.ai_chat_history[cid]
+    def _get_thread_id(message: discord.Message, ref_msg: discord.Message | None) -> int:
+        """Get thread root id for reply-chain memory. If replying to bot, use the message the bot was replying to."""
+        if not message.reference:
+            return message.id
+        if ref_msg and ref_msg.author == bot.user and ref_msg.reference:
+            return ref_msg.reference.message_id  # original user message that started this chain
+        return message.reference.message_id
+
+    async def _do_ai_reply(message: discord.Message, script_dir: str, ref_msg: discord.Message | None = None):
+        """Send AI reply for a message. Uses reply chains for memory. Replies to the user who prompted."""
+        thread_id = _get_thread_id(message, ref_msg)
+        if thread_id not in bot.ai_thread_history:
+            bot.ai_thread_history[thread_id] = []
+        hist = bot.ai_thread_history[thread_id]
         text = (message.content or "").strip()
+        for u in (message.mentions or []):
+            text = text.replace(f"<@{u.id}>", "").strip()
         image_attachments = [a for a in message.attachments if _is_image_attachment(a)]
         user_msg = f"{message.author.display_name}: {text}" if text else f"{message.author.display_name}: [sent an image]"
         hist.append({"role": "user", "content": user_msg})
@@ -1085,15 +1098,20 @@ def main() -> None:
                 reply = await _call_groq(session, messages, image_urls if image_urls else None)
         hist.append({"role": "assistant", "content": reply or ""})
         if not reply or not reply.strip():
-            await message.channel.send(
+            await message.reply(
                 embed=discord.Embed(
                     color=0xf87171,
                     description="No response from AI. Check GROQ_API_KEY in .env (get one at console.groq.com).",
                 )
             )
             return
-        for i in range(0, len(reply), 4096):
-            await message.channel.send(embed=discord.Embed(color=0x4a4a4a, description=reply[i : i + 4096]))
+        chunks = [reply[i : i + 4096] for i in range(0, len(reply), 4096)]
+        for i, chunk in enumerate(chunks):
+            embed = discord.Embed(color=0x4a4a4a, description=chunk)
+            if i == 0:
+                await message.reply(embed=embed)
+            else:
+                await message.channel.send(embed=embed)
 
     @bot.event
     async def on_message(message: discord.Message):
@@ -1106,14 +1124,23 @@ def main() -> None:
         # Always allow prefix commands like !start/!stop to run
         await bot.process_commands(message)
 
-        # AI: in AI_FREE_CHANNEL_ID respond to all; elsewhere require @mention or dashboard-enabled channel
+        # AI: in AI_FREE_CHANNEL_ID respond to all; elsewhere require @mention, dashboard channel, or reply to bot
         ai = bot.ai_state
         is_mentioned = bot.user and bot.user in message.mentions
         in_ai_channel = ai.get("enabled") and ai.get("channel_id") and message.channel.id == ai["channel_id"]
         in_free_channel = ai_free_channel_id and message.channel.id == ai_free_channel_id
-        should_ai = in_free_channel or (is_mentioned and ai.get("mention_enabled", False)) or in_ai_channel
-        if should_ai and message.content and not str(message.content).strip().startswith("!"):
-            await _do_ai_reply(message, script_dir)
+        reply_to_bot = False
+        ref_msg = None
+        if message.reference:
+            try:
+                ref_msg = await message.channel.fetch_message(message.reference.message_id)
+                reply_to_bot = ref_msg.author == bot.user
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        should_ai = in_free_channel or (is_mentioned and ai.get("mention_enabled", False)) or in_ai_channel or reply_to_bot
+        has_content = (message.content and not str(message.content).strip().startswith("!")) or message.attachments
+        if should_ai and has_content:
+            await _do_ai_reply(message, script_dir, ref_msg)
             return
 
         # Optionally stop reacting while still allowing commands
