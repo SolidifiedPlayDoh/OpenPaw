@@ -36,7 +36,7 @@ Use **/** for slash commands (e.g. `/start`, `/help`). Prefix `!` also works.
 - `/say` – Make the bot say something
 - **Quote** – Right-click a message → Apps → Quote
 - `/encrypt`, `/decrypt`, `/brutefernet` – Fernet encryption tools
-- `/hug`, `/help`, `/features`, `/lottery`, `/clearmem`
+- `/hug`, `/help`, `/features`, `/lottery`, `/clearmem`, `/update`
 
 ### AI mode (Groq)
 Uses [Groq](https://console.groq.com) API with Llama 4 Scout (same as vision_bot). Set `GROQ_API_KEY` in `.env`. Supports text and images when @mentioned or in AI channels.
@@ -66,23 +66,10 @@ The workflow `.github/workflows/openpaw-24-7.yml` runs the bot on GitHub. Add th
 - `DISCORD_TOKEN` – bot token
 - `GROQ_API_KEY` – Groq API key
 
-**Variables:**
-- `DEPLOY_PING_USER_ID` – Discord user ID to ping on reload
-- `SOLIDIFIEDPLAYDOH_USER_ID` – Discord user ID to ping when bad words are detected
-
-**Secrets (optional):**
-- `BAD_WORDS` – Comma-separated list of words to monitor (never committed; use this or config/bad_words.json locally)
-
 The job restarts every ~6 hours (GitHub limit). State is auto-saved to the repo on exit.
 
-### Bad-word monitor
-When someone says a monitored word, the bot replies and pings you. The word list is **never committed**:
-- **Local:** Copy `config/bad_words.example.json` to `config/bad_words.json` and add your list
-- **Or** set `BAD_WORDS=word1,word2,word3` in `.env`
-- **GitHub Actions:** Add `BAD_WORDS` as a secret (comma-separated)
-
 ### Project structure
-- `config/` – system_prompt.txt, updates.json, emojis.json, bad_words.example.json
+- `config/` – system_prompt.txt, updates.json, emojis.json
 - `data/` – reload_state.json, guild exports, wordlists
 - `assets/` – images (e.g. ryan-gosling.gif)
 - `docs/` – AI context documentation

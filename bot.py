@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import os
-import re
 import random
 import sys
 import traceback
@@ -46,22 +45,6 @@ def main() -> None:
     emoji_id_raw = os.getenv("EMOJI_ID")  # optional, for precise targeting
     emoji_animated = get_boolean_env("EMOJI_ANIMATED", False)
     guild_id_raw = os.getenv("GUILD_ID")  # optional, for faster slash sync
-
-    # Bad-word monitor: ping when detected (env or fallback). List is never committed - use BAD_WORDS env or config/bad_words.json
-    tell_user_id = os.getenv("SOLIDIFIEDPLAYDOH_USER_ID", "").strip() or "1220125293272891475"
-    bad_words = []
-    env_words = os.getenv("BAD_WORDS", "").strip()
-    if env_words:
-        bad_words = [w.strip().lower() for w in env_words.split(",") if w.strip()]
-    if not bad_words:
-        bad_words_path = os.path.join(script_dir, "config", "bad_words.json")
-        if os.path.isfile(bad_words_path):
-            try:
-                with open(bad_words_path, "r") as f:
-                    data = json.load(f)
-                    bad_words = [w.lower() for w in data.get("words", [])]
-            except (json.JSONDecodeError, OSError):
-                pass
 
     # Load multi-emoji list from config/emojis.json (picks randomly when reacting)
     emoji_list = []
@@ -638,6 +621,7 @@ def main() -> None:
             "**/decrypt** – Decrypt with known key",
             "**/brutefernet** – Brute-force decrypt",
             "**/clearmem** – Clear AI chat history",
+            "**/clearview** – Clear chat view with invisible newlines",
             "**/hug** – Send a hug to someone",
             "**/lottery** – Lottery predictions (joke)",
             "**/say** – Make the bot say something",
@@ -656,7 +640,7 @@ def main() -> None:
             "**/quote** – Right-click message → Apps → Quote\n"
             "**/encrypt** – Encrypt with Fernet\n**/decrypt** – Decrypt with key\n"
             "**/brutefernet** – Brute-force decrypt\n**/clearmem** – Clear AI history\n"
-            "**/hug** – Hug someone\n**/lottery** – Joke predictions\n**/say** – Bot says something\n**/features** – This overview"
+            "**/clearview** – Clear chat view\n**/hug** – Hug someone\n**/lottery** – Joke predictions\n**/say** – Bot says something\n**/features** – This overview"
         ), inline=False)
         embed.add_field(name="😊 Reactions", value="Reacts with emoji to messages. Wordlist: keywords. All: every message.", inline=False)
         embed.add_field(name="🤖 AI Chat", value="@mention or use AI channel. Uses Groq.", inline=False)
@@ -668,6 +652,14 @@ def main() -> None:
     async def clearmem_slash(interaction: discord.Interaction):
         bot.ai_chat_history[interaction.channel.id] = []
         await interaction.response.send_message("✅ AI memory cleared for this channel")
+
+    @bot.tree.command(name="clearview", description="Send invisible newlines to clear the chat view")
+    async def clearview_slash(interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        # Zero-width space between newlines prevents Discord from collapsing them
+        clear_msg = ("\n\u200b" * 200)[:-1]  # 200 newlines, invisible
+        await interaction.channel.send(clear_msg)
+        await interaction.followup.send("✅ View cleared", ephemeral=True)
 
     @bot.tree.command(name="lottery", description="Get OpenPaw's lottery predictions (joke)")
     async def lottery_slash(interaction: discord.Interaction):
@@ -978,7 +970,6 @@ def main() -> None:
             "complete_fake_brute": dashboard_complete_fake_brute,
         }, DASHBOARD_PORT))
         print(f"Logged in as {bot.user} (id={bot.user.id})")
-        print(f"Bad-word monitor: {'ON' if bad_words and tell_user_id else 'OFF'} ({len(bad_words)} words, ping <@{tell_user_id}>)")
         print("Prefix commands ready: !quote, !encrypt, !decrypt, !brutefernet, !start, !stop, !say, !hug, !lottery, !userscout, !clearmem, !features")
         print("Dashboard: http://127.0.0.1:" + str(DASHBOARD_PORT))
 
@@ -1104,26 +1095,6 @@ def main() -> None:
         for i in range(0, len(reply), 4096):
             await message.channel.send(embed=discord.Embed(color=0x4a4a4a, description=reply[i : i + 4096]))
 
-    def _normalize_for_check(text: str) -> str:
-        """Normalize leetspeak and obfuscation so 'n1gg3r' matches 'nigger'."""
-        t = text.lower()
-        for old, new in [("0", "o"), ("1", "i"), ("3", "e"), ("4", "a"), ("5", "s"), ("7", "t"), ("8", "b"), ("9", "g"), ("@", "a"), ("!", "i")]:
-            t = t.replace(old, new)
-        t = t.replace("*", "i")  # n*gger -> nigger
-        return t
-
-    def _contains_bad_word(text: str) -> bool:
-        """Check if text contains any bad word (whole-word match, lenient spellings)."""
-        if not text or not bad_words:
-            return False
-        raw = text.lower()
-        normalized = _normalize_for_check(text)
-        for word in bad_words:
-            pat = r"\b" + re.escape(word) + r"\b"
-            if re.search(pat, raw) or re.search(pat, normalized):
-                return True
-        return False
-
     @bot.event
     async def on_message(message: discord.Message):
         state = bot.bot_state
@@ -1131,19 +1102,6 @@ def main() -> None:
         # Ignore our own messages and other bots to avoid loops
         if message.author.bot:
             return
-
-        # Bad-word check: reply and ping tell_user_id
-        if bad_words and tell_user_id and message.content:
-            if _contains_bad_word(str(message.content)):
-                ping = f"<@{tell_user_id}>"
-                try:
-                    await message.reply(f"thats a bad word :c im telling {ping}")
-                except discord.HTTPException:
-                    try:
-                        await message.channel.send(f"thats a bad word :c im telling {ping}")
-                    except discord.HTTPException:
-                        pass
-                return
 
         # Always allow prefix commands like !start/!stop to run
         await bot.process_commands(message)
