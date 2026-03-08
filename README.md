@@ -29,14 +29,14 @@ Discord bot with reactions, AI chat (Groq/Llama 4 Scout, same as vision_bot), en
 Run the bot and open **http://127.0.0.1:8765** in your browser. Control reactions, send messages, AI toggles, and more. Set `DASHBOARD_PORT` in `.env` to change the port.
 
 ### Commands
-- `!start all` – React to every message (including the most recent)
-- `!start wordlist` – React only to messages containing openpaw, pawsy, or paw
-- `!stop` – Stop reacting
-- `!say <message>` – Make the bot say something (puppet)
-- `!say <channel_id> <message>` – Say in a specific channel
-- `!quote` – Reply to a message to create a quote card
-- `!encrypt`, `!decrypt`, `!brutefernet` – Fernet encryption tools
-- `!hug`, `!help`, `!features`, `!update`, `!clearmem`
+Use **/** for slash commands (e.g. `/start`, `/help`). Prefix `!` also works.
+
+- `/start` – React to messages (choose wordlist or all)
+- `/stop` – Stop reacting
+- `/say` – Make the bot say something
+- **Quote** – Right-click a message → Apps → Quote
+- `/encrypt`, `/decrypt`, `/brutefernet` – Fernet encryption tools
+- `/hug`, `/help`, `/features`, `/lottery`, `/clearmem`, `/update`
 
 ### AI mode (Groq)
 Uses [Groq](https://console.groq.com) API with Llama 4 Scout (same as vision_bot). Set `GROQ_API_KEY` in `.env`. Supports text and images when @mentioned or in AI channels.

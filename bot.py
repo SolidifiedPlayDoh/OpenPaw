@@ -8,6 +8,7 @@ import random
 import sys
 import aiohttp
 import discord
+from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
@@ -630,6 +631,258 @@ def main() -> None:
         except discord.HTTPException as e:
             await ctx.send(f"❌ Failed to leave: {e}")
 
+    # ─── Slash commands (/commands) ───────────────────────────────────────────
+    @bot.tree.command(name="start", description="Start reacting to messages")
+    @app_commands.choices(mode=[app_commands.Choice(name="wordlist", value="wordlist"), app_commands.Choice(name="all", value="all")])
+    async def start_slash(interaction: discord.Interaction, mode: str = "wordlist"):
+        mode_val = (mode or "wordlist").lower()
+        state = bot.bot_state
+        state["reaction_mode"] = mode_val
+        state["reaction_enabled"] = True
+        target_emoji = _pick_reaction_emoji(interaction.guild)
+        if mode_val == "all" and target_emoji and interaction.channel:
+            try:
+                async for msg in interaction.channel.history(limit=5):
+                    if msg.author != bot.user and not msg.author.bot:
+                        try:
+                            await msg.add_reaction(target_emoji)
+                            state["last_reacted_message"] = msg
+                            state["last_reacted_emoji"] = target_emoji
+                            break
+                        except discord.HTTPException:
+                            continue
+            except discord.HTTPException:
+                pass
+        kw = ", ".join(_reaction_keywords()[:5]) + ("..." if len(_reaction_keywords()) > 5 else "")
+        mode_desc = "every message" if mode_val == "all" else f"messages with keywords ({kw})"
+        emoji_display = target_emoji.name if target_emoji else emoji_name
+        await interaction.response.send_message(f"✅ Started reacting to {mode_desc} with :{emoji_display}:")
+
+    @bot.tree.command(name="stop", description="Stop reacting to messages")
+    async def stop_slash(interaction: discord.Interaction):
+        state = bot.bot_state
+        state["reaction_enabled"] = False
+        last_reacted_message = state.get("last_reacted_message")
+        last_emoji = state.get("last_reacted_emoji")
+        if last_reacted_message and last_emoji:
+            try:
+                await last_reacted_message.remove_reaction(last_emoji, bot.user)
+            except discord.HTTPException:
+                pass
+            state["last_reacted_message"] = None
+            state["last_reacted_emoji"] = None
+        await interaction.response.send_message("⏹️ Stopped reacting to messages")
+
+    @bot.tree.command(name="help", description="List all available commands")
+    async def help_slash(interaction: discord.Interaction):
+        embed = discord.Embed(title="OpenPaw Bot Commands", description="All available commands:", color=0x00ff00)
+        lines = [
+            "**/start** – Start reactions (wordlist or all mode)",
+            "**/stop** – Stop reactions",
+            "**/help** – List commands",
+            "**/quote** – Right-click a message → Apps → Quote",
+            "**/encrypt** – Encrypt text with Fernet",
+            "**/decrypt** – Decrypt with known key",
+            "**/brutefernet** – Brute-force decrypt",
+            "**/clearmem** – Clear AI chat history",
+            "**/hug** – Send a hug to someone",
+            "**/lottery** – Lottery predictions (joke)",
+            "**/say** – Make the bot say something",
+            "**/features** – Full overview",
+        ]
+        embed.add_field(name="Commands", value="\n".join(lines), inline=False)
+        embed.set_footer(text="Use / for slash commands")
+        await interaction.response.send_message(embed=embed)
+
+    @bot.tree.command(name="features", description="Full overview of everything the bot can do")
+    async def features_slash(interaction: discord.Interaction):
+        embed = discord.Embed(title="OpenPaw Bot – Features", description="Everything this bot can do.", color=0xe8b923)
+        embed.add_field(name="📦 Commands", value=(
+            "**/start** – Start reactions (wordlist or all)\n"
+            "**/stop** – Stop reactions\n**/help** – List commands\n"
+            "**/quote** – Right-click message → Apps → Quote\n"
+            "**/encrypt** – Encrypt with Fernet\n**/decrypt** – Decrypt with key\n"
+            "**/brutefernet** – Brute-force decrypt\n**/clearmem** – Clear AI history\n"
+            "**/hug** – Hug someone\n**/lottery** – Joke predictions\n**/say** – Bot says something\n**/features** – This overview"
+        ), inline=False)
+        embed.add_field(name="😊 Reactions", value="Reacts with emoji to messages. Wordlist: keywords. All: every message.", inline=False)
+        embed.add_field(name="🤖 AI Chat", value="@mention or use AI channel. Uses Groq.", inline=False)
+        embed.add_field(name="🔊 Voice", value="Auto-joins voice when you join. Follows you.", inline=False)
+        embed.set_footer(text="Use / for slash commands")
+        await interaction.response.send_message(embed=embed)
+
+    @bot.tree.command(name="clearmem", description="Clear AI chat history for this channel")
+    async def clearmem_slash(interaction: discord.Interaction):
+        bot.ai_chat_history[interaction.channel.id] = []
+        await interaction.response.send_message("✅ AI memory cleared for this channel")
+
+    @bot.tree.command(name="lottery", description="Get OpenPaw's lottery predictions (joke)")
+    async def lottery_slash(interaction: discord.Interaction):
+        white = sorted(random.sample(range(1, 70), 5))
+        powerball = random.randint(1, 26)
+        nums = ", ".join(str(n) for n in white) + f" | Powerball: {powerball}"
+        jokes = [
+            "I consulted the stars. These are *definitely* going to win. No refunds.",
+            "100% guaranteed to win. (Disclaimer: 0% guaranteed.)",
+            "I ran these through my quantum prediction module. Trust me.",
+            "These numbers came to me in a dream. A very unreliable dream.",
+        ]
+        embed = discord.Embed(title="🎱 OpenPaw's Lottery Prediction", description=f"**{nums}**", color=0xFFD700)
+        embed.add_field(name="Disclaimer", value=random.choice(jokes), inline=False)
+        embed.set_footer(text="For entertainment only.")
+        await interaction.response.send_message(embed=embed)
+
+    @bot.tree.command(name="hug", description="Send a hug to someone")
+    async def hug_slash(interaction: discord.Interaction, user: discord.Member):
+        await interaction.response.send_message(f"loading: sending hug to {user.display_name}")
+        msg = await interaction.original_response()
+        await asyncio.sleep(1)
+        await msg.edit(content=f"hug sent to {user.display_name} :heart:")
+
+    @bot.tree.command(name="say", description="Make the bot say something")
+    async def say_slash(interaction: discord.Interaction, message: str, channel: discord.TextChannel = None):
+        ch = channel or interaction.channel
+        await ch.send(message)
+        if ch != interaction.channel:
+            await interaction.response.send_message(f"✅ Sent to {ch.mention}", ephemeral=True)
+        else:
+            await interaction.response.send_message("✅ Sent", ephemeral=True)
+
+    @bot.tree.command(name="encrypt", description="Encrypt text with Fernet. Usage: text then key as last word")
+    async def encrypt_slash(interaction: discord.Interaction, text: str, key: str):
+        try:
+            encrypted = encrypt(text, key)
+            await interaction.response.send_message(f"🔐 Encrypted:\n```\n{encrypted}\n```")
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+
+    @bot.tree.command(name="decrypt", description="Decrypt Fernet with known key")
+    async def decrypt_slash(interaction: discord.Interaction, encrypted: str, key: str):
+        try:
+            plaintext = decrypt(encrypted, key)
+            preview = plaintext[:500] + ("..." if len(plaintext) > 500 else "")
+            await interaction.response.send_message(f"🔓 Decrypted:\n```\n{preview}\n```")
+        except InvalidToken:
+            await interaction.response.send_message("❌ Decryption failed (wrong key or invalid token)", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+
+    @bot.tree.command(name="brutefernet", description="Brute-force decrypt (common passwords + wordlist)")
+    async def brutefernet_slash(interaction: discord.Interaction, encrypted: str):
+        progress = {"phase": "starting", "current": 0, "total": 0, "last_tried": ""}
+        await interaction.response.defer()
+        msg = await interaction.followup.send("🔓 Trying common passwords + wordlist...", wait=True)
+
+        async def heartbeat():
+            while True:
+                await asyncio.sleep(2)
+                p = progress
+                status = f"🔓 {p.get('phase', '?')}: {p.get('current', 0)}/{p.get('total', 0)} (last: `{p.get('last_tried', '')[:30]}`)"
+                try:
+                    await msg.edit(content=status)
+                except discord.HTTPException:
+                    pass
+
+        heartbeat_task = asyncio.create_task(heartbeat())
+        try:
+            success, plaintext, pwd = await asyncio.to_thread(try_decrypt, encrypted, progress)
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+
+        if success:
+            preview = plaintext[:500] + ("..." if len(plaintext) > 500 else "")
+            await msg.edit(content=f"✅ Decrypted (password: `{pwd}`):\n```\n{preview}\n```")
+        else:
+            await msg.edit(content="❌ Could not decrypt. Key may be random or use different derivation.")
+
+    @bot.tree.command(name="update", description="Reload the bot and apply updates")
+    async def update_slash(interaction: discord.Interaction):
+        reload_state_path = os.path.join(script_dir, "data", "reload_state.json")
+        state = {}
+        if os.path.isfile(reload_state_path):
+            try:
+                with open(reload_state_path, "r") as f:
+                    state = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+        state["channel_id"] = interaction.channel.id
+        try:
+            with open(reload_state_path, "w") as f:
+                json.dump(state, f)
+        except OSError:
+            pass
+        await interaction.response.send_message("🔄 Updating...")
+        await asyncio.sleep(1)
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    @bot.tree.command(name="userscout", description="List servers a user is in (admin)")
+    @app_commands.default_permissions(administrator=True)
+    async def userscout_slash(interaction: discord.Interaction, user_id: str):
+        if not user_id.isdigit():
+            await interaction.response.send_message("❌ Need numeric Discord user ID", ephemeral=True)
+            return
+        uid = int(user_id)
+        if uid == interaction.user.id:
+            await interaction.response.send_message("👀 Scouting yourself? That's a bit sad.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        found = []
+        for guild in bot.guilds:
+            try:
+                member = await guild.fetch_member(uid)
+                if member:
+                    found.append(f"• **{guild.name}** (`{guild.id}`)")
+            except (discord.NotFound, discord.HTTPException):
+                pass
+        text = f"User `{uid}` is in **{len(found)}** server(s):\n\n" + "\n".join(found[:50]) if found else f"User `{uid}` not found in shared servers."
+        if len(found) > 50:
+            text += f"\n\n...and {len(found) - 50} more."
+        await interaction.followup.send(text)
+
+    @bot.tree.command(name="leaveguild", description="Leave a guild (admin)")
+    @app_commands.default_permissions(administrator=True)
+    async def leaveguild_slash(interaction: discord.Interaction, guild_id: str):
+        if not guild_id.isdigit():
+            await interaction.response.send_message("❌ Invalid guild ID", ephemeral=True)
+            return
+        gid = int(guild_id)
+        guild = bot.get_guild(gid)
+        if not guild:
+            await interaction.response.send_message(f"❌ Not in guild {gid}", ephemeral=True)
+            return
+        try:
+            await guild.leave()
+            await interaction.response.send_message(f"✅ Left **{guild.name}** ({gid})")
+        except discord.HTTPException as e:
+            await interaction.response.send_message(f"❌ Failed: {e}", ephemeral=True)
+
+    @bot.tree.context_menu(name="Quote")
+    async def quote_context(interaction: discord.Interaction, message: discord.Message):
+        await interaction.response.defer()
+        async with aiohttp.ClientSession() as session:
+            avatar_url = str(message.author.display_avatar.replace(size=256, format="png"))
+            async with session.get(avatar_url) as resp:
+                if resp.status != 200:
+                    await interaction.followup.send("❌ Could not fetch avatar", ephemeral=True)
+                    return
+                avatar_bytes = await resp.read()
+        content = message.content or ""
+        if message.embeds:
+            content = content or "(embed)"
+        if message.attachments:
+            content = (content + " " if content else "") + "📎 " + ", ".join(a.filename for a in message.attachments)
+        img_bytes = create_quote_image(
+            avatar_bytes,
+            username=str(message.author.display_name),
+            content=content[:500],
+            timestamp=message.created_at,
+        )
+        await interaction.followup.send(file=discord.File(io.BytesIO(img_bytes), filename="quote.png"))
+
     @bot.event
     async def on_command_error(ctx, error):
         if isinstance(error, commands.CommandNotFound):
@@ -734,6 +987,28 @@ def main() -> None:
     @bot.event
     async def on_ready():
         bot.puppet_channel_id = puppet_channel_id
+        # Sync slash commands (guild-specific is faster; global can take up to 1 hour)
+        try:
+            if guild_id_raw and guild_id_raw.isdigit():
+                guild_obj = discord.Object(id=int(guild_id_raw))
+                bot.tree.copy_global_to(guild=guild_obj)
+                await bot.tree.sync(guild=guild_obj)
+                print("Slash commands synced to guild")
+            else:
+                await bot.tree.sync()
+                print("Slash commands synced globally")
+        except Exception as e:
+            print(f"Slash sync warning: {e}")
+        # When running in GitHub Actions, announce reload to deploy channels
+        if os.getenv("GITHUB_ACTIONS") == "true":
+            deploy_channel_ids = [1479965323477127189, 1480056052949975070]
+            for cid in deploy_channel_ids:
+                ch = bot.get_channel(cid)
+                if ch:
+                    try:
+                        await ch.send("✅ Reloaded successfully!")
+                    except discord.HTTPException:
+                        pass
         # Check if we just ran !update - send completion + latest changelog
         reload_state_path = os.path.join(script_dir, "data", "reload_state.json")
         if os.path.isfile(reload_state_path):
