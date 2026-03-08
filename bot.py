@@ -1099,13 +1099,23 @@ def main() -> None:
         for i in range(0, len(reply), 4096):
             await message.channel.send(embed=discord.Embed(color=0x4a4a4a, description=reply[i : i + 4096]))
 
+    def _normalize_for_check(text: str) -> str:
+        """Normalize leetspeak and obfuscation so 'n1gg3r' matches 'nigger'."""
+        t = text.lower()
+        for old, new in [("0", "o"), ("1", "i"), ("3", "e"), ("4", "a"), ("5", "s"), ("7", "t"), ("8", "b"), ("9", "g"), ("@", "a"), ("!", "i")]:
+            t = t.replace(old, new)
+        t = t.replace("*", "i")  # n*gger -> nigger
+        return t
+
     def _contains_bad_word(text: str) -> bool:
-        """Check if text contains any bad word (whole-word match)."""
+        """Check if text contains any bad word (whole-word match, lenient spellings)."""
         if not text or not bad_words:
             return False
-        content_lower = text.lower()
+        raw = text.lower()
+        normalized = _normalize_for_check(text)
         for word in bad_words:
-            if re.search(r"\b" + re.escape(word) + r"\b", content_lower):
+            pat = r"\b" + re.escape(word) + r"\b"
+            if re.search(pat, raw) or re.search(pat, normalized):
                 return True
         return False
 
