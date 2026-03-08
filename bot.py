@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import hashlib
 import io
 import json
@@ -110,9 +109,11 @@ def main() -> None:
     }
     bot.ai_chat_history = {}  # channel_id -> list of {role, content}
     bot.ai_thread_history = {}  # thread_id (msg id) -> list of {role, content} for reply chains
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    groq_api_url = os.getenv("GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions")
-    groq_model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")  # Free tier; for vision use meta-llama/llama-4-scout-17b-16e-instruct
+    ollama_model = os.getenv("OLLAMA_MODEL", "aeline/Omega")
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    ollama_stream = get_boolean_env("OLLAMA_STREAM", True)
+    ollama_num_predict = int(os.getenv("OLLAMA_NUM_PREDICT", "512"))
+    ollama_num_ctx = int(os.getenv("OLLAMA_NUM_CTX", "2048"))
     system_prompt_env = ""
     prompt_file = os.getenv("SYSTEM_PROMPT_FILE", "").strip()
     if prompt_file:
@@ -125,9 +126,7 @@ def main() -> None:
                 pass
     if not system_prompt_env:
         system_prompt_env = (os.getenv("SYSTEM_PROMPT") or "").strip().replace("\\n", "\n")
-    if not groq_api_key:
-        print("WARNING: GROQ_API_KEY not set. AI features will fail. Get a key at console.groq.com", file=sys.stderr)
-    print(f"AI: Groq {groq_model} | system: {'custom' if system_prompt_env else 'default'}")
+    print(f"AI: Ollama {ollama_model} @ {ollama_base_url} | system: {'custom' if system_prompt_env else 'default'}")
     # Track voice connection
     voice_client = None
 
@@ -998,69 +997,59 @@ def main() -> None:
             return ""
         return "\n\nReference documentation (descriptions only - NO raw code). Use it to answer questions about how the bot works. NEVER output code, snippets, or implementation details - only describe behavior in plain language:\n\n" + "\n\n".join(parts)
 
-    IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
-
-    def _is_image_attachment(att: discord.Attachment) -> bool:
-        if att.filename:
-            ext = os.path.splitext(att.filename.lower())[1]
-            if ext in IMAGE_EXTENSIONS:
-                return True
-        if att.content_type and att.content_type.startswith("image/"):
-            return True
-        return False
-
-    async def _fetch_image_as_base64(session: aiohttp.ClientSession, url: str) -> str | None:
-        try:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.read()
-                content_type = resp.headers.get("Content-Type", "image/png")
-                if "/" not in content_type:
-                    content_type = "image/png"
-                b64 = base64.b64encode(data).decode("ascii")
-                return f"data:{content_type};base64,{b64}"
-        except Exception:
-            return None
-
-    GROQ_CONTEXT_MAX = 131072
-    _vision_models = ("llama-4-scout", "llama-4-scout-17b", "meta-llama/llama-4-scout")
-    _is_vision = any(v in groq_model.lower() for v in _vision_models)
-    GROQ_INPUT_PER_1M = 0.11 if _is_vision else 0.05   # Scout vs Llama 3.1 8B
-    GROQ_OUTPUT_PER_1M = 0.34 if _is_vision else 0.08
-
-    async def _call_groq(session: aiohttp.ClientSession, messages: list, image_urls: list[str] | None = None) -> tuple[str | None, dict]:
-        """Call Groq API. Returns (reply, usage_dict with prompt_tokens, completion_tokens)."""
-        if not groq_api_key:
-            return "GROQ_API_KEY not set. Add it to .env (get one at console.groq.com)", {}
-        use_images = image_urls and _is_vision
-        groq_messages = []
-        for i, m in enumerate(messages):
+    async def _call_ollama(session: aiohttp.ClientSession, messages: list) -> tuple[str | None, dict]:
+        """Call Ollama /api/chat. Returns (reply, usage_dict with eval_count)."""
+        ollama_messages = []
+        for m in messages:
             role = m.get("role", "user")
             content = m.get("content")
-            is_last_user = i == len(messages) - 1 and role == "user" and use_images
-            if is_last_user and isinstance(content, str):
-                parts = [{"type": "text", "text": content}]
-                for url in (image_urls or [])[:4]:
-                    parts.append({"type": "image_url", "image_url": {"url": url}})
-                groq_messages.append({"role": role, "content": parts})
+            if role == "system":
+                ollama_messages.append({"role": "system", "content": content})
             else:
-                groq_messages.append({"role": role, "content": content})
-        payload = {"model": groq_model, "messages": groq_messages, "max_tokens": 4096}
-        headers = {"Authorization": f"Bearer {groq_api_key}", "Content-Type": "application/json"}
+                ollama_messages.append({"role": role, "content": content})
+        payload = {
+            "model": ollama_model,
+            "messages": ollama_messages,
+            "stream": ollama_stream,
+            "options": {"num_predict": ollama_num_predict, "num_ctx": ollama_num_ctx},
+        }
+        url = f"{ollama_base_url}/api/chat"
         try:
-            async with session.post(groq_api_url, json=payload, headers=headers, timeout=90) as resp:
-                if resp.status != 200:
-                    err_text = await resp.text()
-                    return f"API error {resp.status}: {err_text[:500]}", {}
-                data = await resp.json()
-                usage = data.get("usage", {}) or {}
-                choice = data.get("choices", [{}])[0]
-                msg = choice.get("message", {})
-                reply = (msg.get("content") or "").strip() or "(no response)"
+            if ollama_stream:
+                reply_parts = []
+                usage = {}
+                async with session.post(url, json=payload, timeout=300) as resp:
+                    if resp.status != 200:
+                        err_text = await resp.text()
+                        return f"Ollama error {resp.status}: {err_text[:500]}", {}
+                    while True:
+                        line = await resp.content.readline()
+                        if not line:
+                            break
+                        try:
+                            chunk = json.loads(line.decode())
+                            if chunk.get("message", {}).get("content"):
+                                reply_parts.append(chunk["message"]["content"])
+                            if chunk.get("done"):
+                                usage = {"eval_count": chunk.get("eval_count", 0)}
+                        except json.JSONDecodeError:
+                            pass
+                reply = "".join(reply_parts).strip() or "(no response)"
                 return reply, usage
+            else:
+                async with session.post(url, json=payload, timeout=300) as resp:
+                    if resp.status != 200:
+                        err_text = await resp.text()
+                        return f"Ollama error {resp.status}: {err_text[:500]}", {}
+                    data = await resp.json()
+                    msg = data.get("message", {})
+                    reply = (msg.get("content") or "").strip() or "(no response)"
+                    usage = {"eval_count": data.get("eval_count", 0)}
+                    return reply, usage
+        except asyncio.TimeoutError:
+            return "Ollama timed out. Is it running? (ollama serve)", {}
         except Exception as e:
-            return f"Request failed: {e}", {}
+            return f"Ollama error: {e}", {}
 
     def _get_thread_id(message: discord.Message, ref_msg: discord.Message | None) -> int:
         """Get thread root id for reply-chain memory. If replying to bot, use the message the bot was replying to."""
@@ -1084,14 +1073,11 @@ def main() -> None:
         text = (message.content or "").strip()
         for u in (message.mentions or []):
             text = text.replace(f"<@{u.id}>", "").strip()
-        image_attachments = [a for a in message.attachments if _is_image_attachment(a)]
         user_msg = f"{message.author.display_name}: {text}" if text else f"{message.author.display_name}: [sent an image]"
         hist.append({"role": "user", "content": user_msg})
         if len(hist) > 20:
             hist[:] = hist[-20:]
         if reply_to_bot and thread_id not in bot.ai_thread_history:
-            bot.ai_thread_history[thread_id] = list(hist)
-        elif not reply_to_bot and thread_id not in bot.ai_thread_history:
             bot.ai_thread_history[thread_id] = list(hist)
         default_system = (
             "You are an AI bot in a Discord chat. Actually respond to what people say. "
@@ -1106,21 +1092,17 @@ def main() -> None:
             "NEVER say 'No response needed', 'I don't need to respond', 'What's up?', or similar dismissive deflections. "
             "Always engage: if someone shares an image or says something casual, actually respond to it—describe it, react, be playful. "
             "Never refuse to engage with normal chat or images. "
-            "ALWAYS use the conversation history: when they say 'it', 'that', 'can i do it', etc., refer back to what was just discussed."
+            "ALWAYS use the conversation history. When they ask 'what's the number', 'what's it', 'what number', etc., the answer is in the prior messages—look and respond with it."
         )
         context = _build_ai_context(script_dir)
         system_content = base_system + "\n\n" + engagement_rules + context
         messages = [{"role": "system", "content": system_content}] + hist
-        image_urls: list[str] = []
         async with message.channel.typing():
             async with aiohttp.ClientSession() as session:
-                for att in image_attachments[:4]:
-                    data_url = await _fetch_image_as_base64(session, att.url)
-                    if data_url:
-                        image_urls.append(data_url)
-                img_for_api = image_urls if _is_vision else None
-                reply, usage = await _call_groq(session, messages, img_for_api)
+                reply, usage = await _call_ollama(session, messages)
         hist.append({"role": "assistant", "content": reply or ""})
+        if not reply_to_bot:
+            bot.ai_thread_history[thread_id] = list(hist)
         if cid not in bot.ai_chat_history:
             bot.ai_chat_history[cid] = []
         ch_hist = bot.ai_chat_history[cid]
@@ -1133,23 +1115,16 @@ def main() -> None:
             await message.reply(
                 embed=discord.Embed(
                     color=0xf87171,
-                    description="No response from AI. Check GROQ_API_KEY in .env (get one at console.groq.com).",
+                    description="No response from AI. Is Ollama running? (ollama serve, ollama pull aeline/Omega)",
                 )
             )
             return
-        prompt_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
-        completion_tokens = usage.get("completion_tokens") or usage.get("output_tokens") or 0
-        cost = (prompt_tokens * GROQ_INPUT_PER_1M + completion_tokens * GROQ_OUTPUT_PER_1M) / 1e6
-        footer_parts = [
-            f"context {prompt_tokens:,}/{GROQ_CONTEXT_MAX:,}",
-            f"in {prompt_tokens:,} out {completion_tokens:,}",
-            f"${cost:.6f}",
-        ]
-        footer_text = " · ".join(footer_parts)
+        eval_count = usage.get("eval_count", 0)
+        footer_text = f"Ollama · {eval_count:,} tokens" if eval_count else ""
         chunks = [reply[i : i + 4096] for i in range(0, len(reply), 4096)]
         for i, chunk in enumerate(chunks):
             embed = discord.Embed(color=0x4a4a4a, description=chunk)
-            if i == 0:
+            if i == 0 and footer_text:
                 embed.set_footer(text=footer_text)
             if i == 0:
                 await message.reply(embed=embed)

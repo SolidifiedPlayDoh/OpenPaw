@@ -38,8 +38,8 @@ Use **/** for slash commands (e.g. `/start`, `/help`). Prefix `!` also works.
 - `/encrypt`, `/decrypt`, `/brutefernet` – Fernet encryption tools
 - `/hug`, `/help`, `/features`, `/lottery`, `/clearmem`, `/update`
 
-### AI mode (Groq)
-Uses [Groq](https://console.groq.com) API with Llama 4 Scout (same as vision_bot). Set `GROQ_API_KEY` in `.env`. Supports text and images when @mentioned or in AI channels.
+### AI mode (Ollama)
+Uses local [Ollama](https://ollama.com) with Omega. Run `ollama serve` and `ollama pull aeline/Omega`. AI responds when @mentioned or in AI channels.
 
 ### Config
 Set these in `.env`:
@@ -51,8 +51,9 @@ Set these in `.env`:
 - `GUILD_ID` (optional): target guild ID for faster slash sync
 - `PUPPET_CHANNEL_ID` (optional): default channel for dashboard "Quick send"
 - `AI_FREE_CHANNEL_ID` (optional): channel where AI responds to all messages without @mention
-- `GROQ_API_KEY` (required for AI): get at [console.groq.com](https://console.groq.com)
-- `GROQ_MODEL` (optional, default `llama-3.1-8b-instant`): Groq model for AI. Free tier. For image/vision use `meta-llama/llama-4-scout-17b-16e-instruct`
+- `OLLAMA_MODEL` (optional, default `aeline/Omega`): Ollama model. Run `ollama pull aeline/Omega`
+- `OLLAMA_BASE_URL` (optional, default `http://localhost:11434`): Ollama server URL
+- `OLLAMA_STREAM` (optional, default `true`): stream responses
 - `SYSTEM_PROMPT` (optional): custom system prompt (single line; use `\n` for newlines)
 - `SYSTEM_PROMPT_FILE` (optional): path to file with multiline prompt (e.g. `config/system_prompt.txt`)
 
@@ -64,7 +65,8 @@ The workflow `.github/workflows/openpaw-24-7.yml` runs the bot on GitHub. Add th
 
 **Secrets:**
 - `DISCORD_TOKEN` – bot token
-- `GROQ_API_KEY` – Groq API key
+
+Note: The workflow installs Ollama and pulls Omega. For local runs, start `ollama serve` first.
 
 The job restarts every ~6 hours (GitHub limit). State is auto-saved to the repo on exit.
 

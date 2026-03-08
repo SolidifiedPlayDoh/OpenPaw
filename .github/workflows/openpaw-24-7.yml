@@ -1,11 +1,12 @@
 name: OpenPaw 24/7
 
+# Disabled – run locally. Uncomment schedule/push to re-enable.
 on:
-  schedule:
-    - cron: "*/5 * * * *"          # Every 5 min → quick restart after ~6h GitHub kill
-  workflow_dispatch:
-  push:
-    branches: [main]
+  workflow_dispatch:  # Manual only – no auto runs
+  # schedule:
+  #   - cron: "*/5 * * * *"
+  # push:
+  #   branches: [main]
 
 permissions:
   contents: write                  # Required for git commit/push of state files
@@ -29,17 +30,23 @@ jobs:
       - name: Install dependencies
         run: pip install --no-cache-dir -r requirements.txt
 
+      - name: Install Ollama
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 5
+          ollama pull aeline/Omega
+
       - name: Create .env from secrets
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DEPLOY_PING_USER_ID: ${{ vars.DEPLOY_PING_USER_ID }}
         run: |
           cat << EOF > .env
           DISCORD_TOKEN=$DISCORD_TOKEN
-          GROQ_API_KEY=$GROQ_API_KEY
           DEPLOY_PING_USER_ID=$DEPLOY_PING_USER_ID
           EMOJI_NAME=openpaw
+          OLLAMA_MODEL=aeline/Omega
           SYSTEM_PROMPT_FILE=config/system_prompt.txt
           EOF
 
