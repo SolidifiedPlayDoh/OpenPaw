@@ -52,7 +52,7 @@ Set these in `.env`:
 - `PUPPET_CHANNEL_ID` (optional): default channel for dashboard "Quick send"
 - `AI_FREE_CHANNEL_ID` (optional): channel where AI responds to all messages without @mention
 - `GROQ_API_KEY` (required for AI): get at [console.groq.com](https://console.groq.com)
-- `GROQ_MODEL` (optional, default `meta-llama/llama-4-scout-17b-16e-instruct`): Groq model for AI
+- `GROQ_MODEL` (optional, default `llama-3.1-8b-instant`): Groq model for AI. Free tier. For image/vision use `meta-llama/llama-4-scout-17b-16e-instruct`
 - `SYSTEM_PROMPT` (optional): custom system prompt (single line; use `\n` for newlines)
 - `SYSTEM_PROMPT_FILE` (optional): path to file with multiline prompt (e.g. `config/system_prompt.txt`)
 
