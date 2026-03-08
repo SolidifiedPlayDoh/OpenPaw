@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import random
 import sys
 import traceback
@@ -45,6 +46,18 @@ def main() -> None:
     emoji_id_raw = os.getenv("EMOJI_ID")  # optional, for precise targeting
     emoji_animated = get_boolean_env("EMOJI_ANIMATED", False)
     guild_id_raw = os.getenv("GUILD_ID")  # optional, for faster slash sync
+
+    # Bad-word monitor: ping SOLIDIFIEDPLAYDOH_USER_ID when detected
+    tell_user_id = os.getenv("SOLIDIFIEDPLAYDOH_USER_ID", "").strip()
+    bad_words = []
+    bad_words_path = os.path.join(script_dir, "config", "bad_words.json")
+    if os.path.isfile(bad_words_path):
+        try:
+            with open(bad_words_path, "r") as f:
+                data = json.load(f)
+                bad_words = [w.lower() for w in data.get("words", [])]
+        except (json.JSONDecodeError, OSError):
+            pass
 
     # Load multi-emoji list from config/emojis.json (picks randomly when reacting)
     emoji_list = []
@@ -1086,6 +1099,16 @@ def main() -> None:
         for i in range(0, len(reply), 4096):
             await message.channel.send(embed=discord.Embed(color=0x4a4a4a, description=reply[i : i + 4096]))
 
+    def _contains_bad_word(text: str) -> bool:
+        """Check if text contains any bad word (whole-word match)."""
+        if not text or not bad_words:
+            return False
+        content_lower = text.lower()
+        for word in bad_words:
+            if re.search(r"\b" + re.escape(word) + r"\b", content_lower):
+                return True
+        return False
+
     @bot.event
     async def on_message(message: discord.Message):
         state = bot.bot_state
@@ -1093,6 +1116,16 @@ def main() -> None:
         # Ignore our own messages and other bots to avoid loops
         if message.author.bot:
             return
+
+        # Bad-word check: reply and ping tell_user_id
+        if bad_words and tell_user_id and message.content:
+            if _contains_bad_word(str(message.content)):
+                ping = f"<@{tell_user_id}>"
+                try:
+                    await message.reply(f"thats a bad word :c im telling {ping}")
+                except discord.HTTPException:
+                    pass
+                return
 
         # Always allow prefix commands like !start/!stop to run
         await bot.process_commands(message)
