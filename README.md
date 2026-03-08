@@ -65,11 +65,6 @@ The workflow `.github/workflows/openpaw-24-7.yml` runs the bot on GitHub. Add th
 **Secrets:**
 - `DISCORD_TOKEN` – bot token
 - `GROQ_API_KEY` – Groq API key
-- `OPENROUTER_API_KEY` – OpenRouter (for mention monitor)
-- `MONITOR_BOT_TOKEN` – bot token for mention monitor (or use `other_bot_token`)
-
-**Variables** (optional):
-- `GUILD_ID`, `PUPPET_CHANNEL_ID`, `AI_FREE_CHANNEL_ID`
 
 The job restarts every ~6 hours (GitHub limit). State is auto-saved to the repo on exit.
 
