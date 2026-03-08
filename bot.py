@@ -47,17 +47,21 @@ def main() -> None:
     emoji_animated = get_boolean_env("EMOJI_ANIMATED", False)
     guild_id_raw = os.getenv("GUILD_ID")  # optional, for faster slash sync
 
-    # Bad-word monitor: ping SOLIDIFIEDPLAYDOH_USER_ID when detected
-    tell_user_id = os.getenv("SOLIDIFIEDPLAYDOH_USER_ID", "").strip()
+    # Bad-word monitor: ping when detected (env or fallback). List is never committed - use BAD_WORDS env or config/bad_words.json
+    tell_user_id = os.getenv("SOLIDIFIEDPLAYDOH_USER_ID", "").strip() or "1220125293272891475"
     bad_words = []
-    bad_words_path = os.path.join(script_dir, "config", "bad_words.json")
-    if os.path.isfile(bad_words_path):
-        try:
-            with open(bad_words_path, "r") as f:
-                data = json.load(f)
-                bad_words = [w.lower() for w in data.get("words", [])]
-        except (json.JSONDecodeError, OSError):
-            pass
+    env_words = os.getenv("BAD_WORDS", "").strip()
+    if env_words:
+        bad_words = [w.strip().lower() for w in env_words.split(",") if w.strip()]
+    if not bad_words:
+        bad_words_path = os.path.join(script_dir, "config", "bad_words.json")
+        if os.path.isfile(bad_words_path):
+            try:
+                with open(bad_words_path, "r") as f:
+                    data = json.load(f)
+                    bad_words = [w.lower() for w in data.get("words", [])]
+            except (json.JSONDecodeError, OSError):
+                pass
 
     # Load multi-emoji list from config/emojis.json (picks randomly when reacting)
     emoji_list = []
@@ -974,6 +978,7 @@ def main() -> None:
             "complete_fake_brute": dashboard_complete_fake_brute,
         }, DASHBOARD_PORT))
         print(f"Logged in as {bot.user} (id={bot.user.id})")
+        print(f"Bad-word monitor: {'ON' if bad_words and tell_user_id else 'OFF'} ({len(bad_words)} words, ping <@{tell_user_id}>)")
         print("Prefix commands ready: !quote, !encrypt, !decrypt, !brutefernet, !start, !stop, !say, !hug, !lottery, !userscout, !clearmem, !features")
         print("Dashboard: http://127.0.0.1:" + str(DASHBOARD_PORT))
 
@@ -1134,7 +1139,10 @@ def main() -> None:
                 try:
                     await message.reply(f"thats a bad word :c im telling {ping}")
                 except discord.HTTPException:
-                    pass
+                    try:
+                        await message.channel.send(f"thats a bad word :c im telling {ping}")
+                    except discord.HTTPException:
+                        pass
                 return
 
         # Always allow prefix commands like !start/!stop to run

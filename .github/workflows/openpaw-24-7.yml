@@ -34,11 +34,15 @@ jobs:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           DEPLOY_PING_USER_ID: ${{ vars.DEPLOY_PING_USER_ID }}
+          SOLIDIFIEDPLAYDOH_USER_ID: ${{ vars.SOLIDIFIEDPLAYDOH_USER_ID }}
+          BAD_WORDS: ${{ secrets.BAD_WORDS }}
         run: |
           cat << EOF > .env
           DISCORD_TOKEN=$DISCORD_TOKEN
           GROQ_API_KEY=$GROQ_API_KEY
           DEPLOY_PING_USER_ID=$DEPLOY_PING_USER_ID
+          SOLIDIFIEDPLAYDOH_USER_ID=$SOLIDIFIEDPLAYDOH_USER_ID
+          BAD_WORDS=$BAD_WORDS
           EMOJI_NAME=openpaw
           SYSTEM_PROMPT_FILE=config/system_prompt.txt
           EOF

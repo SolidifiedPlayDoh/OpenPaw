@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Bad-word list (add your own; never commit real list)
+config/bad_words.json
+
 # Python
 .venv/
 venv/
