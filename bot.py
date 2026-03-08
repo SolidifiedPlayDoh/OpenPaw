@@ -6,6 +6,7 @@ import json
 import os
 import random
 import sys
+import traceback
 import aiohttp
 import discord
 from discord import app_commands
@@ -635,6 +636,7 @@ def main() -> None:
     @bot.tree.command(name="start", description="Start reacting to messages")
     @app_commands.choices(mode=[app_commands.Choice(name="wordlist", value="wordlist"), app_commands.Choice(name="all", value="all")])
     async def start_slash(interaction: discord.Interaction, mode: str = "wordlist"):
+        await interaction.response.defer()
         mode_val = (mode or "wordlist").lower()
         state = bot.bot_state
         state["reaction_mode"] = mode_val
@@ -656,10 +658,11 @@ def main() -> None:
         kw = ", ".join(_reaction_keywords()[:5]) + ("..." if len(_reaction_keywords()) > 5 else "")
         mode_desc = "every message" if mode_val == "all" else f"messages with keywords ({kw})"
         emoji_display = target_emoji.name if target_emoji else emoji_name
-        await interaction.response.send_message(f"✅ Started reacting to {mode_desc} with :{emoji_display}:")
+        await interaction.followup.send(f"✅ Started reacting to {mode_desc} with :{emoji_display}:")
 
     @bot.tree.command(name="stop", description="Stop reacting to messages")
     async def stop_slash(interaction: discord.Interaction):
+        await interaction.response.defer()
         state = bot.bot_state
         state["reaction_enabled"] = False
         last_reacted_message = state.get("last_reacted_message")
@@ -671,7 +674,7 @@ def main() -> None:
                 pass
             state["last_reacted_message"] = None
             state["last_reacted_emoji"] = None
-        await interaction.response.send_message("⏹️ Stopped reacting to messages")
+        await interaction.followup.send("⏹️ Stopped reacting to messages")
 
     @bot.tree.command(name="help", description="List all available commands")
     async def help_slash(interaction: discord.Interaction):
@@ -880,6 +883,19 @@ def main() -> None:
             timestamp=message.created_at,
         )
         await interaction.followup.send(file=discord.File(io.BytesIO(img_bytes), filename="quote.png"))
+
+    @bot.tree.error
+    async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+        """Always respond to slash commands so Discord never shows 'application did not respond'."""
+        err_msg = str(error) if str(error) else type(error).__name__
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(f"❌ Error: {err_msg}", ephemeral=True)
+            else:
+                await interaction.response.send_message(f"❌ Error: {err_msg}", ephemeral=True)
+        except discord.HTTPException:
+            pass
+        print(f"Slash command error: {error}\n{traceback.format_exc()}")
 
     @bot.event
     async def on_command_error(ctx, error):
