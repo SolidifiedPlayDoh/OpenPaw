@@ -1,0 +1,158 @@
+{
+  "_readme": "Add new entries at the TOP. Format: version, date, title, changes (array of strings)",
+  "entries": [
+    {
+      "version": "1.1.2",
+      "date": "2025-03-07",
+      "title": "Guild export/import",
+      "changes": [
+        "!exportguild – scan server, save channels + roles to guild_export.json",
+        "!importguild [guild_id] – create channels + roles from guild_export.json in target server"
+      ]
+    },
+    {
+      "version": "1.1.1",
+      "date": "2025-03-07",
+      "title": "Fix AI not responding",
+      "changes": [
+        "Added OLLAMA_STREAM=false option—use when streaming hangs (typing but no response)",
+        "Non-streaming fallback when stream returns empty",
+        "Error message when AI returns nothing"
+      ]
+    },
+    {
+      "version": "1.1.0",
+      "date": "2025-03-07",
+      "title": "Rebrand to OpenPaw",
+      "changes": [
+        "Renamed from Ryan Gosling Eating Cereal to OpenPaw",
+        "Removed !cereal command and cereal GIF",
+        "Reaction keywords: openpaw, pawsy, paw (was ryan, gosling, cereal)",
+        "Default emoji: openpaw (was ryangosling)",
+        "Voice announce: OpenPaw is in the voice chat",
+        "Removed [CEREAL] from AI, removed cereal from dashboard"
+      ]
+    },
+    {
+      "version": "1.0.10",
+      "date": "2025-03-07",
+      "title": "Embeds + prompt fixes",
+      "changes": [
+        "AI responses now use embeds (thinking in small grey field, response in main section)",
+        "Thinking disabled by default (think: false) for faster responses",
+        "System prompt: do not mention 'the bot' when answering hacking questions"
+      ]
+    },
+    {
+      "version": "1.0.9",
+      "date": "2025-03-07",
+      "title": "Streaming AI responses",
+      "changes": [
+        "AI streams responses: shows 'thinking...' then streams output via message edits",
+        "For thinking-capable models (OLLAMA_THINK=true): streams thinking, deletes it, then streams output",
+        "Uses Ollama native /api/chat for streaming"
+      ]
+    },
+    {
+      "version": "1.0.8",
+      "date": "2025-03-07",
+      "title": "Ollama + SYSTEM_PROMPT",
+      "changes": [
+        "AI now uses local Ollama (Uncensored) dolphin-mistral instead of Groq",
+        "OLLAMA_MODEL and OLLAMA_BASE_URL env vars",
+        "SYSTEM_PROMPT env: set custom system prompt (use \\n for newlines)"
+      ]
+    },
+    {
+      "version": "1.0.7",
+      "date": "2025-03-07",
+      "title": "GROQ .env loading fix",
+      "changes": [
+        "Load .env from script directory (fixes key not found when run from other dirs)",
+        "Override existing env vars so .env always wins",
+        "Startup log shows GROQ status and .env path for debugging"
+      ]
+    },
+    {
+      "version": "1.0.6",
+      "date": "2025-03-07",
+      "title": "fix groq key",
+      "changes": [
+        "Fixed Groq API key"
+      ]
+    },
+    {
+      "version": "1.0.5",
+      "date": "2025-03-07",
+      "title": "Kimi K2 model",
+      "changes": [
+        "Default AI model: moonshotai/kimi-k2-instruct-0905"
+      ]
+    },
+    {
+      "version": "1.0.4",
+      "date": "2025-03-07",
+      "title": "Groq API",
+      "changes": [
+        "Switched AI from OpenRouter to Groq API (GROQ_API_KEY in .env)"
+      ]
+    },
+    {
+      "version": "1.0.3",
+      "date": "2025-03-07",
+      "title": "AI uncensored",
+      "changes": [
+        "AI no longer instructed to censor itself – responds naturally"
+      ]
+    },
+    {
+      "version": "1.0.2",
+      "date": "2025-03-07",
+      "title": "Hug command",
+      "changes": [
+        "Added !hug @user – sends a hug (loading message updates in place)"
+      ]
+    },
+    {
+      "version": "1.0.1",
+      "date": "2025-03-07",
+      "title": "Simplified update flow",
+      "changes": [
+        "Removed !getupdate – only !update now",
+        "!update reloads and shows changelog only when code actually changed"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2025-03-07",
+      "title": "Update system & features",
+      "changes": [
+        "Added !update – reload the bot and apply updates",
+        "Added !features – full overview of what the bot can do"
+      ]
+    },
+    {
+      "version": "0.9.0",
+      "date": "2025-03-07",
+      "title": "AI & encryption",
+      "changes": [
+        "AI responds when @mentioned (any channel)",
+        "AI uses docs to answer how things work (no raw code)",
+        "!encrypt and !decrypt commands",
+        "!brutefernet – fast SHA256 brute force with Zeta-force search"
+      ]
+    },
+    {
+      "version": "0.8.0",
+      "date": "2025-03-07",
+      "title": "Core features",
+      "changes": [
+        "!cereal – Ryan Gosling GIF",
+        "!quote – create quote cards from messages",
+        "Reactions (wordlist/all mode)",
+        "Voice auto-join and follow",
+        "!start, !stop, !help, !clearmem"
+      ]
+    }
+  ]
+}

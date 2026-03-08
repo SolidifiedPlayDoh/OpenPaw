@@ -1,0 +1,89 @@
+name: OpenPaw 24/7
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"          # Every 5 min → quick restart after ~6h GitHub kill
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write                  # Required for git commit/push of state files
+
+concurrency:
+  group: openpaw-bot-single-instance
+  cancel-in-progress: true
+
+jobs:
+  run-openpaw:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360           # Hard max on hosted runners
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir -r requirements.txt
+
+      - name: Create .env from secrets
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          MONITOR_BOT_TOKEN: ${{ secrets.MONITOR_BOT_TOKEN }}  # Optional
+        run: |
+          cat << EOF > .env
+          DISCORD_TOKEN=$DISCORD_TOKEN
+          GROQ_API_KEY=$GROQ_API_KEY
+          OPENROUTER_API_KEY=$OPENROUTER_API_KEY
+          MONITOR_BOT_TOKEN=$MONITOR_BOT_TOKEN
+          EMOJI_NAME=openpaw
+          SYSTEM_PROMPT_FILE=config/system_prompt.txt
+          EOF
+
+      - name: Run OpenPaw Bot
+        run: |
+          python bot.py &
+          BOT_PID=$!
+
+          # Optional: uncomment if you want mention monitor too
+          # python discord_mention_monitor.py &
+          # MONITOR_PID=$!
+
+          sleep 15  # Give time for login/connect
+
+          kill -0 $BOT_PID 2>/dev/null || { echo "Main bot failed to start"; exit 1; }
+          # kill -0 $MONITOR_PID 2>/dev/null || echo "Monitor failed (continuing)"
+
+          echo "OpenPaw running — will continue until GitHub kills job at ~6 hours"
+
+          trap '
+            echo "Shutdown signal → killing processes"
+            kill -TERM $BOT_PID 2>/dev/null || true
+            # kill -TERM $MONITOR_PID 2>/dev/null || true
+            sleep 5
+            kill -KILL $BOT_PID 2>/dev/null || true
+            # kill -KILL $MONITOR_PID 2>/dev/null || true
+            wait $BOT_PID 2>/dev/null || true
+            # wait $MONITOR_PID 2>/dev/null || true
+            exit 0
+          ' TERM INT
+
+          wait $BOT_PID   # Wait for main bot (or GitHub timeout)
+
+      - name: Save state on exit
+        if: always()
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+
+          for file in reload_state.json data/reload_state.json; do
+            [ -f "$file" ] || continue
+            git add "$file"
+            git commit -m "Auto-save state ($file) $(date -u +'%Y-%m-%d %H:%M:%S UTC')" || echo "No changes to commit"
+            git push origin HEAD:main || echo "Push failed"
+          done

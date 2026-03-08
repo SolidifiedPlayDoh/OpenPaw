@@ -1,0 +1,21 @@
+{
+  "_readme": "Custom emojis for reactions. Bot picks randomly from this list when multiple are defined. Fallback: EMOJI_NAME/EMOJI_ID in .env",
+  "emojis": [
+    {"name": "kissing", "id": "1480064196933845023"},
+    {"name": "whereyoulive", "id": "1480064195796930641"},
+    {"name": "drool", "id": "1480064192374378598"},
+    {"name": "droolsmall", "id": "1480064191120281661"},
+    {"name": "lay", "id": "1480064190314971268"},
+    {"name": "typing", "id": "1480064189266526281"},
+    {"name": "aughhh", "id": "1480064188096315542"},
+    {"name": "sad", "id": "1480064186720452638"},
+    {"name": "pet", "id": "1480064185495982272"},
+    {"name": "meow", "id": "1480064184120115300"},
+    {"name": "jealous", "id": "1480064182417363067"},
+    {"name": "ilikeboys", "id": "1480064180961939588"},
+    {"name": "3inthechat", "id": "1480064178621386752"},
+    {"name": "dance", "id": "1480064176616509541"},
+    {"name": "fogiscoming", "id": "1480064174271893504"},
+    {"name": "yap", "id": "1480064170878701638"}
+  ]
+}
