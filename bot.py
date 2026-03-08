@@ -197,7 +197,6 @@ def main() -> None:
             "encrypt": "!encrypt <text> <key> - encrypt with Fernet (SHA256 key)",
             "decrypt": "!decrypt <encrypted> <key> - decrypt with known key",
             "brutefernet": "!brutefernet <encrypted_string> - try common passwords",
-            "update": "Reload the bot and apply updates",
             "hug": "!hug @user – send a hug",
             "lottery": "Get lottery number predictions (joke)",
             "userscout": "!userscout <user_id> – list shared servers (admin)",
@@ -448,72 +447,6 @@ def main() -> None:
         cid = ctx.channel.id
         bot.ai_chat_history[cid] = []
         await ctx.send("✅ AI memory cleared for this channel")
-
-    def _code_hash(script_dir: str) -> str:
-        """Hash key Python files for version tracking."""
-        files = ["bot.py", "brute_fernet.py", "dashboard.py", "quotes.py"]
-        h = hashlib.sha256()
-        for fname in files:
-            path = os.path.join(script_dir, fname)
-            if os.path.isfile(path):
-                try:
-                    with open(path, "rb") as f:
-                        h.update(f.read())
-                except OSError:
-                    pass
-        return h.hexdigest()[:8]
-
-    def _load_updates() -> list:
-        """Load changelog from updates.json."""
-        path = os.path.join(script_dir, "config", "updates.json")
-        if not os.path.isfile(path):
-            return []
-        try:
-            with open(path, "r") as f:
-                data = json.load(f)
-            return data.get("entries", [])
-        except (json.JSONDecodeError, OSError):
-            return []
-
-    def _updates_embed(entries: list, title_override: str = None) -> discord.Embed:
-        """Build embed from update entries. If single entry, use it. If multiple, show all."""
-        if not entries:
-            return discord.Embed(title="Updates", description="No updates logged yet.", color=0xe8b923)
-        embed = discord.Embed(
-            title=title_override or "Changelog",
-            description="What's new in the bot.",
-            color=0xe8b923,
-        )
-        for entry in entries[:10]:
-            changes = entry.get("changes", [])
-            change_text = "\n".join(f"• {c}" for c in changes) if changes else "—"
-            ver = entry.get("version", "?")
-            date = entry.get("date", "")
-            name = f"v{ver} – {entry.get('title', 'Update')}"
-            if date:
-                name += f" ({date})"
-            embed.add_field(name=name, value=change_text, inline=False)
-        return embed
-
-    @bot.command(name="update", help="Reload the bot and apply updates")
-    async def update_cmd(ctx):
-        reload_state_path = os.path.join(script_dir, "data", "reload_state.json")
-        state = {}
-        if os.path.isfile(reload_state_path):
-            try:
-                with open(reload_state_path, "r") as f:
-                    state = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
-        state["channel_id"] = ctx.channel.id
-        try:
-            with open(reload_state_path, "w") as f:
-                json.dump(state, f)
-        except OSError:
-            pass
-        await ctx.send("🔄 Updating...")
-        await asyncio.sleep(1)
-        os.execv(sys.executable, [sys.executable] + sys.argv)
 
     @bot.command(name="lottery", help="Get OpenPaw's lottery number predictions (joke)")
     async def lottery_cmd(ctx):
@@ -800,26 +733,6 @@ def main() -> None:
         else:
             await msg.edit(content="❌ Could not decrypt. Key may be random or use different derivation.")
 
-    @bot.tree.command(name="update", description="Reload the bot and apply updates")
-    async def update_slash(interaction: discord.Interaction):
-        reload_state_path = os.path.join(script_dir, "data", "reload_state.json")
-        state = {}
-        if os.path.isfile(reload_state_path):
-            try:
-                with open(reload_state_path, "r") as f:
-                    state = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
-        state["channel_id"] = interaction.channel.id
-        try:
-            with open(reload_state_path, "w") as f:
-                json.dump(state, f)
-        except OSError:
-            pass
-        await interaction.response.send_message("🔄 Updating...")
-        await asyncio.sleep(1)
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-
     @bot.tree.command(name="userscout", description="List servers a user is in (admin)")
     @app_commands.default_permissions(administrator=True)
     async def userscout_slash(interaction: discord.Interaction, user_id: str):
@@ -1025,43 +938,6 @@ def main() -> None:
                         await ch.send(msg)
                     except discord.HTTPException:
                         pass
-        # Check if we just ran !update - send completion + latest changelog
-        reload_state_path = os.path.join(script_dir, "data", "reload_state.json")
-        if os.path.isfile(reload_state_path):
-            try:
-                with open(reload_state_path, "r") as f:
-                    state = json.load(f)
-                ch_id = state.get("channel_id")
-                if ch_id:
-                    ch = bot.get_channel(ch_id)
-                    current_hash = _code_hash(script_dir)
-                    prev_hash = state.get("previous_hash")
-                    code_changed = prev_hash and current_hash != prev_hash
-                    if ch:
-                        if code_changed:
-                            entries = _load_updates()
-                            if entries:
-                                latest = entries[0]
-                                embed = _updates_embed([latest], title_override="✅ Update complete!")
-                                embed.set_footer(text=f"Version: {current_hash}")
-                                await ch.send(embed=embed)
-                            else:
-                                await ch.send(f"✅ Update complete. Code changed. Version: `{current_hash}`")
-                        else:
-                            await ch.send(f"✅ Update complete. No changes detected. Version: `{current_hash}`")
-                    state["channel_id"] = None
-                    state["previous_hash"] = current_hash
-                    with open(reload_state_path, "w") as f:
-                        json.dump(state, f)
-            except (json.JSONDecodeError, OSError, KeyError):
-                pass
-        else:
-            # First run - init state with current hash
-            try:
-                with open(reload_state_path, "w") as f:
-                    json.dump({"previous_hash": _code_hash(script_dir), "channel_id": None}, f)
-            except OSError:
-                pass
         async def dashboard_ai_toggle(enabled: bool, channel_id=None):
             bot.ai_state["enabled"] = enabled
             if channel_id is not None:
@@ -1085,7 +961,7 @@ def main() -> None:
             "complete_fake_brute": dashboard_complete_fake_brute,
         }, DASHBOARD_PORT))
         print(f"Logged in as {bot.user} (id={bot.user.id})")
-        print("Prefix commands ready: !quote, !encrypt, !decrypt, !brutefernet, !start, !stop, !say, !hug, !lottery, !userscout, !clearmem, !update, !features")
+        print("Prefix commands ready: !quote, !encrypt, !decrypt, !brutefernet, !start, !stop, !say, !hug, !lottery, !userscout, !clearmem, !features")
         print("Dashboard: http://127.0.0.1:" + str(DASHBOARD_PORT))
 
     def _build_ai_context(script_dir: str) -> str:
