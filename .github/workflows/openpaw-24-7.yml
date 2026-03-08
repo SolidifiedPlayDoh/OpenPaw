@@ -33,10 +33,12 @@ jobs:
         env:
           DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEPLOY_PING_USER_ID: ${{ vars.DEPLOY_PING_USER_ID }}
         run: |
           cat << EOF > .env
           DISCORD_TOKEN=$DISCORD_TOKEN
           GROQ_API_KEY=$GROQ_API_KEY
+          DEPLOY_PING_USER_ID=$DEPLOY_PING_USER_ID
           EMOJI_NAME=openpaw
           SYSTEM_PROMPT_FILE=config/system_prompt.txt
           EOF

@@ -742,11 +742,9 @@ def main() -> None:
     @bot.tree.command(name="say", description="Make the bot say something")
     async def say_slash(interaction: discord.Interaction, message: str, channel: discord.TextChannel = None):
         ch = channel or interaction.channel
+        await interaction.response.defer(ephemeral=True)  # Respond within 3 sec, then do work
         await ch.send(message)
-        if ch != interaction.channel:
-            await interaction.response.send_message(f"✅ Sent to {ch.mention}", ephemeral=True)
-        else:
-            await interaction.response.send_message("✅ Sent", ephemeral=True)
+        await interaction.followup.send(f"✅ Sent to {ch.mention}" if ch != interaction.channel else "✅ Sent", ephemeral=True)
 
     @bot.tree.command(name="encrypt", description="Encrypt text with Fernet. Usage: text then key as last word")
     async def encrypt_slash(interaction: discord.Interaction, text: str, key: str):
@@ -1002,11 +1000,13 @@ def main() -> None:
         # When running in GitHub Actions, announce reload to deploy channels
         if os.getenv("GITHUB_ACTIONS") == "true":
             deploy_channel_ids = [1479965323477127189, 1480056052949975070]
+            ping_id = os.getenv("DEPLOY_PING_USER_ID", "").strip()
+            msg = f"✅ Reloaded successfully! <@{ping_id}>" if ping_id else "✅ Reloaded successfully!"
             for cid in deploy_channel_ids:
                 ch = bot.get_channel(cid)
                 if ch:
                     try:
-                        await ch.send("✅ Reloaded successfully!")
+                        await ch.send(msg)
                     except discord.HTTPException:
                         pass
         # Check if we just ran !update - send completion + latest changelog
